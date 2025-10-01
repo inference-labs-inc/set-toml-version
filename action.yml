@@ -1,0 +1,20 @@
+name: 'Set TOML Version'
+description: 'Update version fields in pyproject.toml or Cargo.toml files'
+branding:
+  icon: 'edit'
+  color: 'blue'
+inputs:
+  version:
+    description: 'Version to set (defaults to tag version from github.ref_name)'
+    required: false
+  files:
+    description: 'Paths to TOML files (one per line, defaults to pyproject.toml and Cargo.toml)'
+    required: false
+outputs:
+  version:
+    description: 'The version that was set'
+  version_underscored:
+    description: 'The version with underscores instead of dots'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
