@@ -30078,6 +30078,8 @@ var __webpack_exports__ = {};
 
 // EXTERNAL MODULE: external "fs"
 var external_fs_ = __nccwpck_require__(9896);
+// EXTERNAL MODULE: external "path"
+var external_path_ = __nccwpck_require__(6928);
 // EXTERNAL MODULE: ./node_modules/.pnpm/@actions+core@1.11.1/node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(6966);
 // EXTERNAL MODULE: ./node_modules/.pnpm/semver@7.7.2/node_modules/semver/index.js
@@ -31227,6 +31229,7 @@ function stringify(obj, { maxDepth = 1000, numbersAsFloat = false } = {}) {
 
 
 
+
 function updateToml(content, version, section) {
   const parsed = parse(content);
   if (!parsed[section]) {
@@ -31252,9 +31255,10 @@ function updateTomlFile(filePath, version) {
     let updated;
     let section;
 
-    if (filePath.includes('Cargo') || filePath.includes('cargo')) {
+    const basename = external_path_.basename(filePath).toLowerCase();
+    if (basename.includes('cargo')) {
       section = 'package';
-    } else if (filePath.includes('pyproject')) {
+    } else if (basename.includes('pyproject')) {
       section = 'project';
     } else {
       core.warning(`Unsupported file type: ${filePath}`);

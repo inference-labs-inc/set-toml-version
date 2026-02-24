@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import * as core from '@actions/core';
 import semver from 'semver';
 import { parse, stringify } from 'smol-toml';
@@ -28,9 +29,10 @@ function updateTomlFile(filePath, version) {
     let updated;
     let section;
 
-    if (filePath.includes('Cargo') || filePath.includes('cargo')) {
+    const basename = path.basename(filePath).toLowerCase();
+    if (basename.includes('cargo')) {
       section = 'package';
-    } else if (filePath.includes('pyproject')) {
+    } else if (basename.includes('pyproject')) {
       section = 'project';
     } else {
       core.warning(`Unsupported file type: ${filePath}`);
