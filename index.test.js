@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,13 +8,18 @@ import { parse } from 'smol-toml';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const testDir = path.join(__dirname, 'test-fixtures');
 
+let importCounter = 0;
 async function runAction() {
-  await import(`./index.js?t=${Date.now()}`);
+  await import(`./index.js?t=${++importCounter}`);
 }
 
-test('setup test fixtures', () => {
-  if (!fs.existsSync(testDir)) {
-    fs.mkdirSync(testDir, { recursive: true });
+before(() => {
+  fs.mkdirSync(testDir, { recursive: true });
+});
+
+after(() => {
+  if (fs.existsSync(testDir)) {
+    fs.rmSync(testDir, { recursive: true });
   }
 });
 
@@ -254,8 +259,26 @@ version = "0.0.0"
   fs.rmSync(path.join(testDir, 'custom'), { recursive: true });
 });
 
-test('cleanup test fixtures', () => {
-  if (fs.existsSync(testDir)) {
-    fs.rmSync(testDir, { recursive: true });
-  }
+test('detects file type from basename not full path', async () => {
+  const cargoDir = path.join(testDir, 'cargo-workspace');
+  fs.mkdirSync(cargoDir, { recursive: true });
+
+  const testFile = path.join(cargoDir, 'pyproject.toml');
+  const content = `[project]
+name = "test"
+version = "0.0.0"
+`;
+  fs.writeFileSync(testFile, content);
+
+  process.env.INPUT_VERSION = '6.0.0';
+  process.env.INPUT_FILES = testFile;
+  process.env.GITHUB_REF_NAME = '';
+
+  await runAction();
+
+  const updated = fs.readFileSync(testFile, 'utf8');
+  const parsed = parse(updated);
+  assert.strictEqual(parsed.project.version, '6.0.0');
+
+  fs.rmSync(cargoDir, { recursive: true });
 });
