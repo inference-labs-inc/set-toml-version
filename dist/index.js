@@ -1252,7 +1252,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.argStringToArray = exports.ToolRunner = void 0;
 const os = __importStar(__nccwpck_require__(857));
 const events = __importStar(__nccwpck_require__(4434));
-const child = __importStar(__nccwpck_require__(7698));
+const child = __importStar(__nccwpck_require__(5317));
 const path = __importStar(__nccwpck_require__(6928));
 const io = __importStar(__nccwpck_require__(378));
 const ioUtil = __importStar(__nccwpck_require__(527));
@@ -6129,7 +6129,7 @@ const MockClient = __nccwpck_require__(1134)
 const MockAgent = __nccwpck_require__(4280)
 const MockPool = __nccwpck_require__(723)
 const mockErrors = __nccwpck_require__(8074)
-const ProxyAgent = __nccwpck_require__(5317)
+const ProxyAgent = __nccwpck_require__(7698)
 const RetryHandler = __nccwpck_require__(5970)
 const { getGlobalDispatcher, setGlobalDispatcher } = __nccwpck_require__(4662)
 const DecoratorHandler = __nccwpck_require__(6459)
@@ -25935,7 +25935,7 @@ module.exports = Pool
 
 /***/ }),
 
-/***/ 5317:
+/***/ 7698:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
@@ -28227,7 +28227,7 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("buffer");
 
 /***/ }),
 
-/***/ 7698:
+/***/ 5317:
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("child_process");
@@ -30080,6 +30080,8 @@ var __webpack_exports__ = {};
 var external_fs_ = __nccwpck_require__(9896);
 // EXTERNAL MODULE: external "path"
 var external_path_ = __nccwpck_require__(6928);
+// EXTERNAL MODULE: external "child_process"
+var external_child_process_ = __nccwpck_require__(5317);
 // EXTERNAL MODULE: ./node_modules/.pnpm/@actions+core@1.11.1/node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(6966);
 // EXTERNAL MODULE: ./node_modules/.pnpm/semver@7.7.2/node_modules/semver/index.js
@@ -31230,6 +31232,7 @@ function stringify(obj, { maxDepth = 1000, numbersAsFloat = false } = {}) {
 
 
 
+
 function updateToml(content, version, section) {
   const parsed = parse(content);
   if (!parsed[section]) {
@@ -31305,6 +31308,19 @@ function run() {
     } else {
       core.info(`Updated version to ${cleaned} in these files:`);
       updatedFiles.forEach((file) => core.info(`  - ${file}`));
+    }
+
+    if (core.getInput('verify') === 'true') {
+      const expectedSet = new Set(files);
+      const changedFiles = (0,external_child_process_.execSync)('git diff --name-only', { encoding: 'utf8' })
+        .split('\n')
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0);
+      const unexpected = changedFiles.filter((f) => !expectedSet.has(f));
+      if (unexpected.length > 0) {
+        throw new Error(`Version injection modified unexpected files: ${unexpected.join(', ')}`);
+      }
+      core.info('Verified: no unexpected files modified');
     }
 
     const versionUnderscored = cleaned.replace(/\./g, '_');

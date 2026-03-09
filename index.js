@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import * as core from '@actions/core';
 import semver from 'semver';
 import { parse, stringify } from 'smol-toml';
@@ -79,6 +80,19 @@ function run() {
     } else {
       core.info(`Updated version to ${cleaned} in these files:`);
       updatedFiles.forEach((file) => core.info(`  - ${file}`));
+    }
+
+    if (core.getInput('verify') === 'true') {
+      const expectedSet = new Set(files);
+      const changedFiles = execSync('git diff --name-only', { encoding: 'utf8' })
+        .split('\n')
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0);
+      const unexpected = changedFiles.filter((f) => !expectedSet.has(f));
+      if (unexpected.length > 0) {
+        throw new Error(`Version injection modified unexpected files: ${unexpected.join(', ')}`);
+      }
+      core.info('Verified: no unexpected files modified');
     }
 
     const versionUnderscored = cleaned.replace(/\./g, '_');

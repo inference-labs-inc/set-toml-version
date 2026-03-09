@@ -10,6 +10,10 @@ inputs:
   files:
     description: 'Paths to TOML files (one per line, defaults to pyproject.toml and Cargo.toml)'
     required: false
+  verify:
+    description: 'Verify that only the declared files were modified (rejects unexpected git changes)'
+    required: false
+    default: 'false'
 outputs:
   version:
     description: 'The version that was set'
