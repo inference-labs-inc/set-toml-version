@@ -1,6 +1,7 @@
 import os
 import subprocess
 import tempfile
+import unittest
 from unittest.mock import patch
 
 import tomlkit
@@ -8,65 +9,65 @@ import tomlkit
 from set_version import clean_version, detect_section, update_file, verify_no_unexpected_changes
 
 
-class TestCleanVersion:
+class TestCleanVersion(unittest.TestCase):
     def test_plain_semver(self):
-        assert clean_version("1.2.3") == "1.2.3"
+        self.assertEqual(clean_version("1.2.3"), "1.2.3")
 
     def test_v_prefix(self):
-        assert clean_version("v3.4.5") == "3.4.5"
+        self.assertEqual(clean_version("v3.4.5"), "3.4.5")
 
     def test_equals_prefix(self):
-        assert clean_version("=1.0.0") == "1.0.0"
+        self.assertEqual(clean_version("=1.0.0"), "1.0.0")
 
     def test_whitespace_prefix(self):
-        assert clean_version("  2.0.0") == "2.0.0"
+        self.assertEqual(clean_version("  2.0.0"), "2.0.0")
 
     def test_prerelease_rc(self):
-        assert clean_version("v2.0.0-rc.4") == "2.0.0-rc.4"
+        self.assertEqual(clean_version("v2.0.0-rc.4"), "2.0.0-rc.4")
 
     def test_prerelease_alpha(self):
-        assert clean_version("3.0.0-alpha.1") == "3.0.0-alpha.1"
+        self.assertEqual(clean_version("3.0.0-alpha.1"), "3.0.0-alpha.1")
 
     def test_prerelease_beta(self):
-        assert clean_version("4.5.6-beta.2") == "4.5.6-beta.2"
+        self.assertEqual(clean_version("4.5.6-beta.2"), "4.5.6-beta.2")
 
     def test_build_metadata(self):
-        assert clean_version("1.0.0+build.123") == "1.0.0+build.123"
+        self.assertEqual(clean_version("1.0.0+build.123"), "1.0.0+build.123")
 
     def test_prerelease_and_build(self):
-        assert clean_version("v1.0.0-rc.1+build.456") == "1.0.0-rc.1+build.456"
+        self.assertEqual(clean_version("v1.0.0-rc.1+build.456"), "1.0.0-rc.1+build.456")
 
     def test_invalid_returns_none(self):
-        assert clean_version("not-a-version") is None
+        self.assertIsNone(clean_version("not-a-version"))
 
     def test_empty_returns_none(self):
-        assert clean_version("") is None
+        self.assertIsNone(clean_version(""))
 
     def test_large_numbers(self):
-        assert clean_version("10.20.30") == "10.20.30"
+        self.assertEqual(clean_version("10.20.30"), "10.20.30")
 
 
-class TestDetectSection:
+class TestDetectSection(unittest.TestCase):
     def test_cargo_toml(self):
-        assert detect_section("Cargo.toml") == "package"
+        self.assertEqual(detect_section("Cargo.toml"), "package")
 
     def test_pyproject_toml(self):
-        assert detect_section("pyproject.toml") == "project"
+        self.assertEqual(detect_section("pyproject.toml"), "project")
 
     def test_nested_cargo(self):
-        assert detect_section("crates/foo/Cargo.toml") == "package"
+        self.assertEqual(detect_section("crates/foo/Cargo.toml"), "package")
 
     def test_nested_pyproject(self):
-        assert detect_section("some/path/pyproject.toml") == "project"
+        self.assertEqual(detect_section("some/path/pyproject.toml"), "project")
 
     def test_unknown_file(self):
-        assert detect_section("setup.cfg") is None
+        self.assertIsNone(detect_section("setup.cfg"))
 
     def test_case_insensitive(self):
-        assert detect_section("CARGO.TOML") == "package"
+        self.assertEqual(detect_section("CARGO.TOML"), "package")
 
 
-class TestUpdateFile:
+class TestUpdateFile(unittest.TestCase):
     def _write_toml(self, directory, filename, content):
         filepath = os.path.join(directory, filename)
         with open(filepath, "w") as f:
@@ -76,16 +77,16 @@ class TestUpdateFile:
     def test_update_cargo(self):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\nversion = "0.0.0"\nedition = "2021"\n\n[dependencies]\nserde = "1.0"\n')
-            assert update_file(fp, "1.2.3") is True
+            self.assertTrue(update_file(fp, "1.2.3"))
             parsed = tomlkit.parse(open(fp).read())
-            assert parsed["package"]["version"] == "1.2.3"
+            self.assertEqual(parsed["package"]["version"], "1.2.3")
 
     def test_update_pyproject(self):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "pyproject.toml", '[project]\nname = "test"\nversion = "0.0.0"\ndescription = "Test"\n')
-            assert update_file(fp, "2.0.0") is True
+            self.assertTrue(update_file(fp, "2.0.0"))
             parsed = tomlkit.parse(open(fp).read())
-            assert parsed["project"]["version"] == "2.0.0"
+            self.assertEqual(parsed["project"]["version"], "2.0.0")
 
     def test_preserves_formatting(self):
         with tempfile.TemporaryDirectory() as d:
@@ -93,44 +94,40 @@ class TestUpdateFile:
             fp = self._write_toml(d, "Cargo.toml", original)
             update_file(fp, "1.0.0")
             result = open(fp).read()
-            assert '[dependencies]\nserde = "1.0"' in result
-            assert result.count("\n\n") == original.count("\n\n")
+            self.assertIn('[dependencies]\nserde = "1.0"', result)
+            self.assertEqual(result.count("\n\n"), original.count("\n\n"))
 
     def test_skip_missing_file(self):
-        assert update_file("/nonexistent/Cargo.toml", "1.0.0") is False
+        self.assertFalse(update_file("/nonexistent/Cargo.toml", "1.0.0"))
 
     def test_skip_unsupported_file(self):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "setup.cfg", "[metadata]\nversion = 0.0.0\n")
-            assert update_file(fp, "1.0.0") is False
+            self.assertFalse(update_file(fp, "1.0.0"))
 
     def test_missing_section_exits(self):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "Cargo.toml", '[dependencies]\nserde = "1.0"\n')
-            try:
+            with self.assertRaises(SystemExit) as ctx:
                 update_file(fp, "1.0.0")
-                assert False, "Should have called sys.exit"
-            except SystemExit as e:
-                assert e.code == 1
+            self.assertEqual(ctx.exception.code, 1)
 
     def test_missing_version_field_exits(self):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\n')
-            try:
+            with self.assertRaises(SystemExit) as ctx:
                 update_file(fp, "1.0.0")
-                assert False, "Should have called sys.exit"
-            except SystemExit as e:
-                assert e.code == 1
+            self.assertEqual(ctx.exception.code, 1)
 
     def test_prerelease_version(self):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\nversion = "0.0.0"\n')
             update_file(fp, "2.0.0-rc.4")
             parsed = tomlkit.parse(open(fp).read())
-            assert parsed["package"]["version"] == "2.0.0-rc.4"
+            self.assertEqual(parsed["package"]["version"], "2.0.0-rc.4")
 
 
-class TestVerifyNoUnexpectedChanges:
+class TestVerifyNoUnexpectedChanges(unittest.TestCase):
     def _mock_git_diff(self, files):
         stdout = "\n".join(files) + "\n" if files else ""
         return subprocess.CompletedProcess(
@@ -154,16 +151,16 @@ class TestVerifyNoUnexpectedChanges:
 
     def test_unexpected_file_exits(self):
         with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["pyproject.toml", "sneaky.txt"])):
-            try:
+            with self.assertRaises(SystemExit) as ctx:
                 verify_no_unexpected_changes(["pyproject.toml"])
-                assert False, "Should have called sys.exit"
-            except SystemExit as e:
-                assert e.code == 1
+            self.assertEqual(ctx.exception.code, 1)
 
     def test_all_unexpected_exits(self):
         with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["malicious.py"])):
-            try:
+            with self.assertRaises(SystemExit) as ctx:
                 verify_no_unexpected_changes(["pyproject.toml"])
-                assert False, "Should have called sys.exit"
-            except SystemExit as e:
-                assert e.code == 1
+            self.assertEqual(ctx.exception.code, 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
