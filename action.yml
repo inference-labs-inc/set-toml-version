@@ -27,25 +27,10 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - shell: bash
-      run: pip install tomlkit==0.14.0
-
     - id: set-version
       shell: bash
       run: python3 "$GITHUB_ACTION_PATH/set_version.py"
       env:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_FILES: ${{ inputs.files }}
-
-    - if: inputs.verify == 'true'
-      shell: bash
-      run: |
-        expected=$(echo "$INPUT_FILES" | tr -s '[:space:]' '\n' | sed '/^$/d' | sort -u)
-        changed=$(git diff --name-only | sort -u)
-        unexpected=$(comm -23 <(echo "$changed") <(echo "$expected"))
-        if [ -n "$unexpected" ]; then
-          echo "::error::Version injection modified unexpected files: $unexpected"
-          exit 1
-        fi
-      env:
-        INPUT_FILES: ${{ inputs.files }}
+        INPUT_VERIFY: ${{ inputs.verify }}

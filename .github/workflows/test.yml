@@ -18,6 +18,4 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install tomlkit==0.14.0
-
       - run: python -m pytest test_set_version.py -v

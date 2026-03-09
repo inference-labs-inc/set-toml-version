@@ -1,12 +1,16 @@
 import os
 import re
+import subprocess
 import sys
 
 import tomlkit
 
 
 def clean_version(raw):
-    match = re.match(r"[v=\s]*((\d+)\.(\d+)\.(\d+)(?:[-][a-zA-Z0-9.]+)?(?:[+][a-zA-Z0-9.]+)?)", raw)
+    match = re.match(
+        r"[v=\s]*((\d+)\.(\d+)\.(\d+)(?:[-][a-zA-Z0-9.]+)?(?:[+][a-zA-Z0-9.]+)?)",
+        raw,
+    )
     if not match:
         return None
     return match.group(1)
@@ -53,6 +57,25 @@ def update_file(filepath, version):
     return True
 
 
+def verify_no_unexpected_changes(expected_files):
+    result = subprocess.run(
+        ["git", "diff", "--name-only"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    changed = {f.strip() for f in result.stdout.splitlines() if f.strip()}
+    expected = {f.strip() for f in expected_files if f.strip()}
+    unexpected = sorted(changed - expected)
+    if unexpected:
+        print(
+            f"::error::Version injection modified unexpected files: {', '.join(unexpected)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print("Verified: no unexpected files modified")
+
+
 def main():
     raw = os.environ.get("INPUT_VERSION") or os.environ.get("GITHUB_REF_NAME", "")
     version = clean_version(raw)
@@ -73,6 +96,9 @@ def main():
 
     if not updated:
         print("::warning::No files were updated")
+
+    if os.environ.get("INPUT_VERIFY", "false").lower() == "true":
+        verify_no_unexpected_changes(files)
 
     version_underscored = version.replace(".", "_")
 

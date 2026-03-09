@@ -1,9 +1,11 @@
 import os
+import subprocess
 import tempfile
+from unittest.mock import patch
 
 import tomlkit
 
-from set_version import clean_version, detect_section, update_file
+from set_version import clean_version, detect_section, update_file, verify_no_unexpected_changes
 
 
 class TestCleanVersion:
@@ -126,3 +128,42 @@ class TestUpdateFile:
             update_file(fp, "2.0.0-rc.4")
             parsed = tomlkit.parse(open(fp).read())
             assert parsed["package"]["version"] == "2.0.0-rc.4"
+
+
+class TestVerifyNoUnexpectedChanges:
+    def _mock_git_diff(self, files):
+        stdout = "\n".join(files) + "\n" if files else ""
+        return subprocess.CompletedProcess(
+            args=["git", "diff", "--name-only"],
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+        )
+
+    def test_no_changes_passes(self):
+        with patch("set_version.subprocess.run", return_value=self._mock_git_diff([])):
+            verify_no_unexpected_changes(["pyproject.toml"])
+
+    def test_expected_changes_pass(self):
+        with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["pyproject.toml", "Cargo.toml"])):
+            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"])
+
+    def test_subset_of_expected_passes(self):
+        with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["pyproject.toml"])):
+            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"])
+
+    def test_unexpected_file_exits(self):
+        with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["pyproject.toml", "sneaky.txt"])):
+            try:
+                verify_no_unexpected_changes(["pyproject.toml"])
+                assert False, "Should have called sys.exit"
+            except SystemExit as e:
+                assert e.code == 1
+
+    def test_all_unexpected_exits(self):
+        with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["malicious.py"])):
+            try:
+                verify_no_unexpected_changes(["pyproject.toml"])
+                assert False, "Should have called sys.exit"
+            except SystemExit as e:
+                assert e.code == 1

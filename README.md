@@ -85,7 +85,7 @@ jobs:
 
 ## How it works
 
-- Parses TOML files using [tomlkit](https://pypi.org/project/tomlkit/) (format-preserving)
+- Parses TOML files using vendored [tomlkit](https://pypi.org/project/tomlkit/) 0.14.0 (format-preserving, zero runtime dependencies)
 - Updates `package.version` in `Cargo.toml`
 - Updates `project.version` in `pyproject.toml`
 - Validates versions via regex (strips `v`/`=`/whitespace prefixes, supports prerelease and build metadata)
