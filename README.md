@@ -83,6 +83,10 @@ jobs:
 - run: echo "Artifact name: my-app-${{ steps.set_version.outputs.version_underscored }}"
 ```
 
+## Requirements
+
+Python 3.8+ must be available on the runner. GitHub-hosted runners include Python 3 by default. Self-hosted runners must have `python3` in `PATH` or use `actions/setup-python` before this action.
+
 ## How it works
 
 - Parses TOML files using vendored [tomlkit](https://pypi.org/project/tomlkit/) 0.14.0 (format-preserving, zero runtime dependencies)

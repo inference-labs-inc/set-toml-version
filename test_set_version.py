@@ -78,14 +78,16 @@ class TestUpdateFile(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\nversion = "0.0.0"\nedition = "2021"\n\n[dependencies]\nserde = "1.0"\n')
             self.assertTrue(update_file(fp, "1.2.3"))
-            parsed = tomlkit.parse(open(fp).read())
+            with open(fp) as f:
+                parsed = tomlkit.parse(f.read())
             self.assertEqual(parsed["package"]["version"], "1.2.3")
 
     def test_update_pyproject(self):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "pyproject.toml", '[project]\nname = "test"\nversion = "0.0.0"\ndescription = "Test"\n')
             self.assertTrue(update_file(fp, "2.0.0"))
-            parsed = tomlkit.parse(open(fp).read())
+            with open(fp) as f:
+                parsed = tomlkit.parse(f.read())
             self.assertEqual(parsed["project"]["version"], "2.0.0")
 
     def test_preserves_formatting(self):
@@ -93,7 +95,8 @@ class TestUpdateFile(unittest.TestCase):
             original = '[package]\nname = "test"\nversion = "0.0.0"\nedition = "2021"\n\n[dependencies]\nserde = "1.0"\n'
             fp = self._write_toml(d, "Cargo.toml", original)
             update_file(fp, "1.0.0")
-            result = open(fp).read()
+            with open(fp) as f:
+                result = f.read()
             self.assertIn('[dependencies]\nserde = "1.0"', result)
             self.assertEqual(result.count("\n\n"), original.count("\n\n"))
 
@@ -123,7 +126,8 @@ class TestUpdateFile(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\nversion = "0.0.0"\n')
             update_file(fp, "2.0.0-rc.4")
-            parsed = tomlkit.parse(open(fp).read())
+            with open(fp) as f:
+                parsed = tomlkit.parse(f.read())
             self.assertEqual(parsed["package"]["version"], "2.0.0-rc.4")
 
 

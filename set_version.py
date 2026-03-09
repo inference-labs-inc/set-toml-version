@@ -35,7 +35,7 @@ def update_file(filepath, version):
         print(f"::warning::Unsupported file type: {filepath}")
         return False
 
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
 
     if section not in doc:
@@ -51,7 +51,7 @@ def update_file(filepath, version):
 
     doc[section]["version"] = version
 
-    with open(filepath, "w") as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         f.write(tomlkit.dumps(doc))
 
     return True
@@ -102,9 +102,11 @@ def main():
 
     version_underscored = version.replace(".", "_")
 
-    with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-        f.write(f"version={version}\n")
-        f.write(f"version_underscored={version_underscored}\n")
+    output_file = os.environ.get("GITHUB_OUTPUT")
+    if output_file:
+        with open(output_file, "a", encoding="utf-8") as f:
+            f.write(f"version={version}\n")
+            f.write(f"version_underscored={version_underscored}\n")
 
 
 if __name__ == "__main__":
