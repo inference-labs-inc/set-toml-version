@@ -7,9 +7,10 @@ import tomlkit
 
 
 def clean_version(raw):
-    match = re.match(
-        r"[v=\s]*((\d+)\.(\d+)\.(\d+)(?:[-][a-zA-Z0-9.]+)?(?:[+][a-zA-Z0-9.]+)?)",
-        raw,
+    cleaned = re.sub(r"^[v=]+", "", raw.strip())
+    match = re.fullmatch(
+        r"(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)",
+        cleaned,
     )
     if not match:
         return None
@@ -57,16 +58,21 @@ def update_file(filepath, version):
     return True
 
 
-def verify_no_unexpected_changes(expected_files):
+def changed_files():
     result = subprocess.run(
         ["git", "diff", "--name-only"],
         capture_output=True,
         text=True,
         check=True,
     )
-    changed = {f.strip() for f in result.stdout.splitlines() if f.strip()}
+    return {f.strip() for f in result.stdout.splitlines() if f.strip()}
+
+
+def verify_no_unexpected_changes(expected_files, baseline):
+    current = changed_files()
+    new_changes = current - baseline
     expected = {f.strip() for f in expected_files if f.strip()}
-    unexpected = sorted(changed - expected)
+    unexpected = sorted(new_changes - expected)
     if unexpected:
         print(
             f"::error::Version injection modified unexpected files: {', '.join(unexpected)}",
@@ -77,6 +83,9 @@ def verify_no_unexpected_changes(expected_files):
 
 
 def main():
+    verify = os.environ.get("INPUT_VERIFY", "false").lower() == "true"
+    baseline = changed_files() if verify else set()
+
     raw = os.environ.get("INPUT_VERSION") or os.environ.get("GITHUB_REF_NAME", "")
     version = clean_version(raw)
     if not version:
@@ -95,10 +104,11 @@ def main():
             print(f"  - {filepath}")
 
     if not updated:
-        print("::warning::No files were updated")
+        print("::error::No files were updated", file=sys.stderr)
+        sys.exit(1)
 
-    if os.environ.get("INPUT_VERIFY", "false").lower() == "true":
-        verify_no_unexpected_changes(files)
+    if verify:
+        verify_no_unexpected_changes(files, baseline)
 
     version_underscored = version.replace(".", "_")
 

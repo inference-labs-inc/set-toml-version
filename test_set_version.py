@@ -46,6 +46,15 @@ class TestCleanVersion(unittest.TestCase):
     def test_large_numbers(self):
         self.assertEqual(clean_version("10.20.30"), "10.20.30")
 
+    def test_trailing_junk_rejected(self):
+        self.assertIsNone(clean_version("v1.2.3junk"))
+
+    def test_trailing_space_accepted(self):
+        self.assertEqual(clean_version("1.2.3  "), "1.2.3")
+
+    def test_v_equals_prefix(self):
+        self.assertEqual(clean_version("v=1.0.0"), "1.0.0")
+
 
 class TestDetectSection(unittest.TestCase):
     def test_cargo_toml(self):
@@ -142,27 +151,37 @@ class TestVerifyNoUnexpectedChanges(unittest.TestCase):
         )
 
     def test_no_changes_passes(self):
-        with patch("set_version.subprocess.run", return_value=self._mock_git_diff([])):
-            verify_no_unexpected_changes(["pyproject.toml"])
+        with patch("set_version.changed_files", return_value=set()):
+            verify_no_unexpected_changes(["pyproject.toml"], baseline=set())
 
     def test_expected_changes_pass(self):
-        with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["pyproject.toml", "Cargo.toml"])):
-            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"])
+        with patch("set_version.changed_files", return_value={"pyproject.toml", "Cargo.toml"}):
+            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"], baseline=set())
 
     def test_subset_of_expected_passes(self):
-        with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["pyproject.toml"])):
-            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"])
+        with patch("set_version.changed_files", return_value={"pyproject.toml"}):
+            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"], baseline=set())
 
     def test_unexpected_file_exits(self):
-        with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["pyproject.toml", "sneaky.txt"])):
+        with patch("set_version.changed_files", return_value={"pyproject.toml", "sneaky.txt"}):
             with self.assertRaises(SystemExit) as ctx:
-                verify_no_unexpected_changes(["pyproject.toml"])
+                verify_no_unexpected_changes(["pyproject.toml"], baseline=set())
             self.assertEqual(ctx.exception.code, 1)
 
     def test_all_unexpected_exits(self):
-        with patch("set_version.subprocess.run", return_value=self._mock_git_diff(["malicious.py"])):
+        with patch("set_version.changed_files", return_value={"malicious.py"}):
             with self.assertRaises(SystemExit) as ctx:
-                verify_no_unexpected_changes(["pyproject.toml"])
+                verify_no_unexpected_changes(["pyproject.toml"], baseline=set())
+            self.assertEqual(ctx.exception.code, 1)
+
+    def test_baseline_excluded_from_check(self):
+        with patch("set_version.changed_files", return_value={"pyproject.toml", "pre-existing.txt"}):
+            verify_no_unexpected_changes(["pyproject.toml"], baseline={"pre-existing.txt"})
+
+    def test_baseline_plus_unexpected_still_fails(self):
+        with patch("set_version.changed_files", return_value={"pyproject.toml", "pre-existing.txt", "sneaky.txt"}):
+            with self.assertRaises(SystemExit) as ctx:
+                verify_no_unexpected_changes(["pyproject.toml"], baseline={"pre-existing.txt"})
             self.assertEqual(ctx.exception.code, 1)
 
 
