@@ -50,12 +50,22 @@ def update_file(filepath, version):
         )
         sys.exit(1)
 
+    if doc[section]["version"] == version:
+        return False
+
     doc[section]["version"] = version
 
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(tomlkit.dumps(doc))
 
     return True
+
+
+def normalize_path(p):
+    normalized = os.path.normpath(p.strip()).replace("\\", "/")
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
 
 
 def changed_files():
@@ -65,13 +75,13 @@ def changed_files():
         text=True,
         check=True,
     )
-    return {f.strip() for f in result.stdout.splitlines() if f.strip()}
+    return {normalize_path(f) for f in result.stdout.splitlines() if f.strip()}
 
 
 def verify_no_unexpected_changes(expected_files, baseline):
     current = changed_files()
     new_changes = current - baseline
-    expected = {f.strip() for f in expected_files if f.strip()}
+    expected = {normalize_path(f) for f in expected_files if f.strip()}
     unexpected = sorted(new_changes - expected)
     if unexpected:
         print(

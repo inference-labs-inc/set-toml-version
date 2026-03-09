@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import tomlkit
 
-from set_version import clean_version, detect_section, update_file, verify_no_unexpected_changes
+from set_version import clean_version, detect_section, normalize_path, update_file, verify_no_unexpected_changes
 
 
 class TestCleanVersion(unittest.TestCase):
@@ -139,6 +139,40 @@ class TestUpdateFile(unittest.TestCase):
                 parsed = tomlkit.parse(f.read())
             self.assertEqual(parsed["package"]["version"], "2.0.0-rc.4")
 
+    def test_noop_when_version_matches(self):
+        with tempfile.TemporaryDirectory() as d:
+            fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\nversion = "1.0.0"\n')
+            self.assertFalse(update_file(fp, "1.0.0"))
+
+    def test_noop_does_not_write(self):
+        with tempfile.TemporaryDirectory() as d:
+            content = '[package]\nname = "test"\nversion = "1.0.0"\n'
+            fp = self._write_toml(d, "Cargo.toml", content)
+            mtime_before = os.path.getmtime(fp)
+            update_file(fp, "1.0.0")
+            with open(fp) as f:
+                self.assertEqual(f.read(), content)
+
+
+class TestNormalizePath(unittest.TestCase):
+    def test_dot_slash_prefix(self):
+        self.assertEqual(normalize_path("./pyproject.toml"), "pyproject.toml")
+
+    def test_backslash(self):
+        self.assertEqual(normalize_path("dir\\Cargo.toml"), "dir/Cargo.toml")
+
+    def test_already_normalized(self):
+        self.assertEqual(normalize_path("pyproject.toml"), "pyproject.toml")
+
+    def test_nested_path(self):
+        self.assertEqual(normalize_path("crates/foo/Cargo.toml"), "crates/foo/Cargo.toml")
+
+    def test_trailing_whitespace(self):
+        self.assertEqual(normalize_path("  pyproject.toml  "), "pyproject.toml")
+
+    def test_double_dot_slash(self):
+        self.assertEqual(normalize_path("./dir/../dir/Cargo.toml"), "dir/Cargo.toml")
+
 
 class TestVerifyNoUnexpectedChanges(unittest.TestCase):
     def _mock_git_diff(self, files):
@@ -183,6 +217,14 @@ class TestVerifyNoUnexpectedChanges(unittest.TestCase):
             with self.assertRaises(SystemExit) as ctx:
                 verify_no_unexpected_changes(["pyproject.toml"], baseline={"pre-existing.txt"})
             self.assertEqual(ctx.exception.code, 1)
+
+    def test_dot_slash_path_matches(self):
+        with patch("set_version.changed_files", return_value={"pyproject.toml"}):
+            verify_no_unexpected_changes(["./pyproject.toml"], baseline=set())
+
+    def test_backslash_path_matches(self):
+        with patch("set_version.changed_files", return_value={"dir/Cargo.toml"}):
+            verify_no_unexpected_changes(["dir\\Cargo.toml"], baseline=set())
 
 
 if __name__ == "__main__":
