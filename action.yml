@@ -10,15 +10,42 @@ inputs:
   files:
     description: 'Paths to TOML files (one per line, defaults to pyproject.toml and Cargo.toml)'
     required: false
+    default: |
+      pyproject.toml
+      Cargo.toml
   verify:
-    description: 'Verify that only the declared files were modified (rejects unexpected git changes)'
+    description: 'Reject unexpected git changes after version injection'
     required: false
     default: 'false'
 outputs:
   version:
-    description: 'The version that was set'
+    description: 'The cleaned version that was set'
+    value: ${{ steps.set-version.outputs.version }}
   version_underscored:
-    description: 'The version with underscores instead of dots'
+    description: 'The version with dots replaced by underscores'
+    value: ${{ steps.set-version.outputs.version_underscored }}
 runs:
-  using: 'node20'
-  main: 'dist/index.js'
+  using: 'composite'
+  steps:
+    - shell: bash
+      run: pip install tomlkit==0.14.0
+
+    - id: set-version
+      shell: bash
+      run: python3 "$GITHUB_ACTION_PATH/set_version.py"
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_FILES: ${{ inputs.files }}
+
+    - if: inputs.verify == 'true'
+      shell: bash
+      run: |
+        expected=$(echo "$INPUT_FILES" | tr -s '[:space:]' '\n' | sed '/^$/d' | sort -u)
+        changed=$(git diff --name-only | sort -u)
+        unexpected=$(comm -23 <(echo "$changed") <(echo "$expected"))
+        if [ -n "$unexpected" ]; then
+          echo "::error::Version injection modified unexpected files: $unexpected"
+          exit 1
+        fi
+      env:
+        INPUT_FILES: ${{ inputs.files }}

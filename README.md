@@ -14,10 +14,11 @@ GitHub Action to update version fields in `pyproject.toml` and `Cargo.toml` file
 
 ### Inputs
 
-| Input     | Description                           | Required | Default                            |
-| --------- | ------------------------------------- | -------- | ---------------------------------- |
-| `version` | Version to set (cleaned via `semver`) | No       | Tag version from `github.ref_name` |
-| `files`   | Paths to TOML files (one per line)    | No       | `pyproject.toml` and `Cargo.toml`  |
+| Input     | Description                                                     | Required | Default                            |
+| --------- | --------------------------------------------------------------- | -------- | ---------------------------------- |
+| `version` | Version to set (strips `v`/`=`/whitespace prefix)               | No       | Tag version from `github.ref_name` |
+| `files`   | Paths to TOML files (one per line)                              | No       | `pyproject.toml` and `Cargo.toml`  |
+| `verify`  | Reject unexpected git changes after version injection           | No       | `false`                            |
 
 ### Outputs
 
@@ -59,6 +60,18 @@ jobs:
       crates/cli/Cargo.toml
 ```
 
+### Verify no unexpected file changes
+
+```yaml
+- uses: inference-labs-inc/set-toml-version@v1
+  with:
+    version: '2.0.0'
+    verify: 'true'
+    files: |
+      pyproject.toml
+      Cargo.toml
+```
+
 ### Use version in later steps
 
 ```yaml
@@ -72,7 +85,8 @@ jobs:
 
 ## How it works
 
-- Parses TOML files using `smol-toml`
+- Parses TOML files using [tomlkit](https://pypi.org/project/tomlkit/) (format-preserving)
 - Updates `package.version` in `Cargo.toml`
 - Updates `project.version` in `pyproject.toml`
-- Validates versions with `semver`
+- Validates versions via regex (strips `v`/`=`/whitespace prefixes, supports prerelease and build metadata)
+- Optional `verify` mode rejects git changes outside the declared file list

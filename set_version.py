@@ -1,0 +1,85 @@
+import os
+import re
+import sys
+
+import tomlkit
+
+
+def clean_version(raw):
+    match = re.match(r"[v=\s]*((\d+)\.(\d+)\.(\d+)(?:[-][a-zA-Z0-9.]+)?(?:[+][a-zA-Z0-9.]+)?)", raw)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def detect_section(filepath):
+    basename = os.path.basename(filepath).lower()
+    if "cargo" in basename:
+        return "package"
+    if "pyproject" in basename:
+        return "project"
+    return None
+
+
+def update_file(filepath, version):
+    if not os.path.exists(filepath):
+        print(f"Skipping {filepath} (not found)")
+        return False
+
+    section = detect_section(filepath)
+    if not section:
+        print(f"::warning::Unsupported file type: {filepath}")
+        return False
+
+    with open(filepath, "r") as f:
+        doc = tomlkit.parse(f.read())
+
+    if section not in doc:
+        print(f"::error::Section [{section}] not found in {filepath}", file=sys.stderr)
+        sys.exit(1)
+
+    if "version" not in doc[section]:
+        print(
+            f"::error::No version field in [{section}] of {filepath}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    doc[section]["version"] = version
+
+    with open(filepath, "w") as f:
+        f.write(tomlkit.dumps(doc))
+
+    return True
+
+
+def main():
+    raw = os.environ.get("INPUT_VERSION") or os.environ.get("GITHUB_REF_NAME", "")
+    version = clean_version(raw)
+    if not version:
+        print(f"::error::Invalid version: {raw}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Setting version to: {version}")
+
+    files_input = os.environ.get("INPUT_FILES", "pyproject.toml\nCargo.toml")
+    files = [f.strip() for f in files_input.split("\n") if f.strip()]
+
+    updated = []
+    for filepath in files:
+        if update_file(filepath, version):
+            updated.append(filepath)
+            print(f"  - {filepath}")
+
+    if not updated:
+        print("::warning::No files were updated")
+
+    version_underscored = version.replace(".", "_")
+
+    with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+        f.write(f"version={version}\n")
+        f.write(f"version_underscored={version_underscored}\n")
+
+
+if __name__ == "__main__":
+    main()
