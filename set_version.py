@@ -91,8 +91,14 @@ def main():
     if not version:
         die(f"Invalid version: {raw}")
 
-    files_input = os.environ.get("INPUT_FILES", "pyproject.toml\nCargo.toml")
-    files = [f.strip() for f in files_input.split("\n") if f.strip()]
+    files_input = os.environ.get("INPUT_FILES")
+    if files_input:
+        files = [f.strip() for f in files_input.split("\n") if f.strip()]
+    else:
+        files = [f for f in ("pyproject.toml", "Cargo.toml") if os.path.exists(f)]
+
+    if not files:
+        die("No supported manifest files found")
 
     updated = []
     for filepath in files:
