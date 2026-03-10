@@ -8,11 +8,8 @@ inputs:
     description: 'Version to set (defaults to tag version from github.ref_name)'
     required: false
   files:
-    description: 'Paths to TOML files (one per line, defaults to pyproject.toml and Cargo.toml)'
+    description: 'Paths to TOML files (one per line; auto-discovers pyproject.toml and Cargo.toml if omitted)'
     required: false
-    default: |
-      pyproject.toml
-      Cargo.toml
   verify:
     description: 'Reject unexpected git changes after version injection'
     required: false

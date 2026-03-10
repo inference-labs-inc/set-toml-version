@@ -34,7 +34,7 @@ def update_file(filepath, version):
     if not section:
         die(f"Unsupported file type: {filepath}")
 
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, "r", encoding="utf-8", newline="") as f:
         doc = tomlkit.parse(f.read())
 
     if section not in doc or "version" not in doc[section]:
@@ -45,7 +45,7 @@ def update_file(filepath, version):
 
     doc[section]["version"] = version
 
-    with open(filepath, "w", encoding="utf-8") as f:
+    with open(filepath, "w", encoding="utf-8", newline="") as f:
         f.write(tomlkit.dumps(doc))
 
     return True
