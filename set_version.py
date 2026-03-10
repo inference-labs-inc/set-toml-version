@@ -5,50 +5,40 @@ import sys
 
 import tomlkit
 
+SEMVER_RE = re.compile(
+    r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+    r"(?:-(?:(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
+    r"(?:\+(?:[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
+)
+
+SECTION_MAP = {
+    "cargo.toml": "package",
+    "pyproject.toml": "project",
+}
+
 
 def clean_version(raw):
     cleaned = re.sub(r"^[v=]+", "", raw.strip())
-    match = re.fullmatch(
-        r"(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)",
-        cleaned,
-    )
+    match = re.fullmatch(SEMVER_RE, cleaned)
     if not match:
         return None
-    return match.group(1)
+    return match.group(0)
 
 
 def detect_section(filepath):
-    basename = os.path.basename(filepath).lower()
-    if "cargo" in basename:
-        return "package"
-    if "pyproject" in basename:
-        return "project"
-    return None
+    return SECTION_MAP.get(os.path.basename(filepath).lower())
 
 
 def update_file(filepath, version):
-    if not os.path.exists(filepath):
-        print(f"::error::File not found: {filepath}", file=sys.stderr)
-        sys.exit(1)
-
     section = detect_section(filepath)
     if not section:
-        print(f"::error::Unsupported file type: {filepath}", file=sys.stderr)
-        sys.exit(1)
+        die(f"Unsupported file type: {filepath}")
 
     with open(filepath, "r", encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
 
-    if section not in doc:
-        print(f"::error::Section [{section}] not found in {filepath}", file=sys.stderr)
-        sys.exit(1)
-
-    if "version" not in doc[section]:
-        print(
-            f"::error::No version field in [{section}] of {filepath}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    if section not in doc or "version" not in doc[section]:
+        die(f"No [{section}].version in {filepath}")
 
     if doc[section]["version"] == version:
         return False
@@ -63,40 +53,33 @@ def update_file(filepath, version):
 
 def normalize_path(p):
     normalized = os.path.normpath(p.strip()).replace("\\", "/")
-    if normalized.startswith("./"):
-        normalized = normalized[2:]
-    return normalized
+    return normalized.removeprefix("./")
 
 
 def changed_files():
     tracked = subprocess.run(
         ["git", "diff", "--name-only"],
-        capture_output=True,
-        text=True,
-        check=True,
+        capture_output=True, text=True, check=True,
     )
     untracked = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
-        capture_output=True,
-        text=True,
-        check=True,
+        capture_output=True, text=True, check=True,
     )
     paths = tracked.stdout.splitlines() + untracked.stdout.splitlines()
     return {normalize_path(f) for f in paths if f.strip()}
 
 
 def verify_no_unexpected_changes(expected_files, baseline):
-    current = changed_files()
-    new_changes = current - baseline
-    expected = {normalize_path(f) for f in expected_files if f.strip()}
+    new_changes = changed_files() - baseline
+    expected = {normalize_path(f) for f in expected_files}
     unexpected = sorted(new_changes - expected)
     if unexpected:
-        print(
-            f"::error::Version injection modified unexpected files: {', '.join(unexpected)}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    print("Verified: no unexpected files modified")
+        die(f"Version injection modified unexpected files: {', '.join(unexpected)}")
+
+
+def die(msg):
+    print(f"::error::{msg}", file=sys.stderr)
+    sys.exit(1)
 
 
 def main():
@@ -106,34 +89,31 @@ def main():
     raw = os.environ.get("INPUT_VERSION") or os.environ.get("GITHUB_REF_NAME", "")
     version = clean_version(raw)
     if not version:
-        print(f"::error::Invalid version: {raw}", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"Setting version to: {version}")
+        die(f"Invalid version: {raw}")
 
     files_input = os.environ.get("INPUT_FILES", "pyproject.toml\nCargo.toml")
     files = [f.strip() for f in files_input.split("\n") if f.strip()]
 
     updated = []
     for filepath in files:
+        if not os.path.exists(filepath):
+            die(f"File not found: {filepath}")
         if update_file(filepath, version):
             updated.append(filepath)
-            print(f"  - {filepath}")
 
     if not updated:
-        print("::error::No files were updated", file=sys.stderr)
-        sys.exit(1)
+        die("No files were updated")
+
+    print(f"Set version {version} in: {', '.join(updated)}")
 
     if verify:
         verify_no_unexpected_changes(files, baseline)
-
-    version_underscored = version.replace(".", "_")
 
     output_file = os.environ.get("GITHUB_OUTPUT")
     if output_file:
         with open(output_file, "a", encoding="utf-8") as f:
             f.write(f"version={version}\n")
-            f.write(f"version_underscored={version_underscored}\n")
+            f.write(f"version_underscored={version.replace('.', '_')}\n")
 
 
 if __name__ == "__main__":

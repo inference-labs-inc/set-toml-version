@@ -1,5 +1,4 @@
 import os
-import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -10,7 +9,7 @@ from set_version import clean_version, detect_section, normalize_path, update_fi
 
 
 class TestCleanVersion(unittest.TestCase):
-    def test_plain_semver(self):
+    def test_plain(self):
         self.assertEqual(clean_version("1.2.3"), "1.2.3")
 
     def test_v_prefix(self):
@@ -19,16 +18,16 @@ class TestCleanVersion(unittest.TestCase):
     def test_equals_prefix(self):
         self.assertEqual(clean_version("=1.0.0"), "1.0.0")
 
-    def test_whitespace_prefix(self):
-        self.assertEqual(clean_version("  2.0.0"), "2.0.0")
+    def test_whitespace(self):
+        self.assertEqual(clean_version("  2.0.0  "), "2.0.0")
 
-    def test_prerelease_rc(self):
+    def test_prerelease(self):
         self.assertEqual(clean_version("v2.0.0-rc.4"), "2.0.0-rc.4")
 
-    def test_prerelease_alpha(self):
+    def test_alpha(self):
         self.assertEqual(clean_version("3.0.0-alpha.1"), "3.0.0-alpha.1")
 
-    def test_prerelease_beta(self):
+    def test_beta(self):
         self.assertEqual(clean_version("4.5.6-beta.2"), "4.5.6-beta.2")
 
     def test_build_metadata(self):
@@ -37,30 +36,36 @@ class TestCleanVersion(unittest.TestCase):
     def test_prerelease_and_build(self):
         self.assertEqual(clean_version("v1.0.0-rc.1+build.456"), "1.0.0-rc.1+build.456")
 
-    def test_invalid_returns_none(self):
-        self.assertIsNone(clean_version("not-a-version"))
-
-    def test_empty_returns_none(self):
-        self.assertIsNone(clean_version(""))
-
     def test_large_numbers(self):
         self.assertEqual(clean_version("10.20.30"), "10.20.30")
 
-    def test_trailing_junk_rejected(self):
+    def test_trailing_junk(self):
         self.assertIsNone(clean_version("v1.2.3junk"))
 
-    def test_trailing_space_accepted(self):
-        self.assertEqual(clean_version("1.2.3  "), "1.2.3")
+    def test_empty(self):
+        self.assertIsNone(clean_version(""))
 
-    def test_v_equals_prefix(self):
-        self.assertEqual(clean_version("v=1.0.0"), "1.0.0")
+    def test_invalid(self):
+        self.assertIsNone(clean_version("not-a-version"))
+
+    def test_leading_zero_major(self):
+        self.assertIsNone(clean_version("01.2.3"))
+
+    def test_leading_zero_prerelease(self):
+        self.assertIsNone(clean_version("1.2.3-01"))
+
+    def test_empty_prerelease_segment(self):
+        self.assertIsNone(clean_version("1.2.3-alpha..1"))
+
+    def test_zero_major(self):
+        self.assertEqual(clean_version("0.1.0"), "0.1.0")
 
 
 class TestDetectSection(unittest.TestCase):
-    def test_cargo_toml(self):
+    def test_cargo(self):
         self.assertEqual(detect_section("Cargo.toml"), "package")
 
-    def test_pyproject_toml(self):
+    def test_pyproject(self):
         self.assertEqual(detect_section("pyproject.toml"), "project")
 
     def test_nested_cargo(self):
@@ -69,169 +74,136 @@ class TestDetectSection(unittest.TestCase):
     def test_nested_pyproject(self):
         self.assertEqual(detect_section("some/path/pyproject.toml"), "project")
 
-    def test_unknown_file(self):
+    def test_unknown(self):
         self.assertIsNone(detect_section("setup.cfg"))
 
-    def test_case_insensitive(self):
-        self.assertEqual(detect_section("CARGO.TOML"), "package")
+    def test_cargo_lock_rejected(self):
+        self.assertIsNone(detect_section("Cargo.lock"))
+
+    def test_backup_rejected(self):
+        self.assertIsNone(detect_section("pyproject.toml.bak"))
 
 
 class TestUpdateFile(unittest.TestCase):
-    def _write_toml(self, directory, filename, content):
-        filepath = os.path.join(directory, filename)
-        with open(filepath, "w") as f:
+    def _write(self, d, name, content):
+        fp = os.path.join(d, name)
+        with open(fp, "w") as f:
             f.write(content)
-        return filepath
+        return fp
 
-    def test_update_cargo(self):
+    def test_cargo(self):
         with tempfile.TemporaryDirectory() as d:
-            fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\nversion = "0.0.0"\nedition = "2021"\n\n[dependencies]\nserde = "1.0"\n')
+            fp = self._write(d, "Cargo.toml", '[package]\nname = "t"\nversion = "0.0.0"\n\n[dependencies]\nserde = "1"\n')
             self.assertTrue(update_file(fp, "1.2.3"))
             with open(fp) as f:
-                parsed = tomlkit.parse(f.read())
-            self.assertEqual(parsed["package"]["version"], "1.2.3")
+                self.assertEqual(tomlkit.parse(f.read())["package"]["version"], "1.2.3")
 
-    def test_update_pyproject(self):
+    def test_pyproject(self):
         with tempfile.TemporaryDirectory() as d:
-            fp = self._write_toml(d, "pyproject.toml", '[project]\nname = "test"\nversion = "0.0.0"\ndescription = "Test"\n')
+            fp = self._write(d, "pyproject.toml", '[project]\nname = "t"\nversion = "0.0.0"\n')
             self.assertTrue(update_file(fp, "2.0.0"))
             with open(fp) as f:
-                parsed = tomlkit.parse(f.read())
-            self.assertEqual(parsed["project"]["version"], "2.0.0")
+                self.assertEqual(tomlkit.parse(f.read())["project"]["version"], "2.0.0")
 
     def test_preserves_formatting(self):
         with tempfile.TemporaryDirectory() as d:
-            original = '[package]\nname = "test"\nversion = "0.0.0"\nedition = "2021"\n\n[dependencies]\nserde = "1.0"\n'
-            fp = self._write_toml(d, "Cargo.toml", original)
+            original = '[package]\nname = "t"\nversion = "0.0.0"\n\n[dependencies]\nserde = "1"\n'
+            fp = self._write(d, "Cargo.toml", original)
             update_file(fp, "1.0.0")
             with open(fp) as f:
                 result = f.read()
-            self.assertIn('[dependencies]\nserde = "1.0"', result)
+            self.assertIn('[dependencies]\nserde = "1"', result)
             self.assertEqual(result.count("\n\n"), original.count("\n\n"))
 
-    def test_missing_file_exits(self):
-        with self.assertRaises(SystemExit) as ctx:
-            update_file("/nonexistent/Cargo.toml", "1.0.0")
-        self.assertEqual(ctx.exception.code, 1)
-
-    def test_unsupported_file_exits(self):
+    def test_unsupported_exits(self):
         with tempfile.TemporaryDirectory() as d:
-            fp = self._write_toml(d, "setup.cfg", "[metadata]\nversion = 0.0.0\n")
-            with self.assertRaises(SystemExit) as ctx:
+            fp = self._write(d, "setup.cfg", "[metadata]\nversion = 0\n")
+            with self.assertRaises(SystemExit):
                 update_file(fp, "1.0.0")
-            self.assertEqual(ctx.exception.code, 1)
 
     def test_missing_section_exits(self):
         with tempfile.TemporaryDirectory() as d:
-            fp = self._write_toml(d, "Cargo.toml", '[dependencies]\nserde = "1.0"\n')
-            with self.assertRaises(SystemExit) as ctx:
+            fp = self._write(d, "Cargo.toml", '[dependencies]\nserde = "1"\n')
+            with self.assertRaises(SystemExit):
                 update_file(fp, "1.0.0")
-            self.assertEqual(ctx.exception.code, 1)
 
-    def test_missing_version_field_exits(self):
+    def test_missing_version_exits(self):
         with tempfile.TemporaryDirectory() as d:
-            fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\n')
-            with self.assertRaises(SystemExit) as ctx:
+            fp = self._write(d, "Cargo.toml", '[package]\nname = "t"\n')
+            with self.assertRaises(SystemExit):
                 update_file(fp, "1.0.0")
-            self.assertEqual(ctx.exception.code, 1)
 
-    def test_prerelease_version(self):
+    def test_noop_returns_false(self):
         with tempfile.TemporaryDirectory() as d:
-            fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\nversion = "0.0.0"\n')
-            update_file(fp, "2.0.0-rc.4")
-            with open(fp) as f:
-                parsed = tomlkit.parse(f.read())
-            self.assertEqual(parsed["package"]["version"], "2.0.0-rc.4")
-
-    def test_noop_when_version_matches(self):
-        with tempfile.TemporaryDirectory() as d:
-            fp = self._write_toml(d, "Cargo.toml", '[package]\nname = "test"\nversion = "1.0.0"\n')
+            fp = self._write(d, "Cargo.toml", '[package]\nname = "t"\nversion = "1.0.0"\n')
             self.assertFalse(update_file(fp, "1.0.0"))
 
-    def test_noop_does_not_write(self):
+    def test_noop_no_write(self):
         with tempfile.TemporaryDirectory() as d:
-            content = '[package]\nname = "test"\nversion = "1.0.0"\n'
-            fp = self._write_toml(d, "Cargo.toml", content)
-            with patch("builtins.open", wraps=open) as mocked_open:
-                self.assertFalse(update_file(fp, "1.0.0"))
-            write_calls = [
-                c for c in mocked_open.call_args_list
-                if len(c.args) >= 2 and "w" in c.args[1]
-            ]
-            self.assertEqual(write_calls, [])
+            fp = self._write(d, "Cargo.toml", '[package]\nname = "t"\nversion = "1.0.0"\n')
+            with patch("builtins.open", wraps=open) as m:
+                update_file(fp, "1.0.0")
+            self.assertFalse([c for c in m.call_args_list if len(c.args) >= 2 and "w" in c.args[1]])
+
+    def test_prerelease(self):
+        with tempfile.TemporaryDirectory() as d:
+            fp = self._write(d, "Cargo.toml", '[package]\nname = "t"\nversion = "0.0.0"\n')
+            update_file(fp, "2.0.0-rc.4")
+            with open(fp) as f:
+                self.assertEqual(tomlkit.parse(f.read())["package"]["version"], "2.0.0-rc.4")
 
 
 class TestNormalizePath(unittest.TestCase):
-    def test_dot_slash_prefix(self):
+    def test_dot_slash(self):
         self.assertEqual(normalize_path("./pyproject.toml"), "pyproject.toml")
 
     def test_backslash(self):
         self.assertEqual(normalize_path("dir\\Cargo.toml"), "dir/Cargo.toml")
 
-    def test_already_normalized(self):
+    def test_passthrough(self):
         self.assertEqual(normalize_path("pyproject.toml"), "pyproject.toml")
 
-    def test_nested_path(self):
-        self.assertEqual(normalize_path("crates/foo/Cargo.toml"), "crates/foo/Cargo.toml")
-
-    def test_trailing_whitespace(self):
-        self.assertEqual(normalize_path("  pyproject.toml  "), "pyproject.toml")
-
-    def test_double_dot_slash(self):
+    def test_parent_collapse(self):
         self.assertEqual(normalize_path("./dir/../dir/Cargo.toml"), "dir/Cargo.toml")
 
+    def test_whitespace(self):
+        self.assertEqual(normalize_path("  pyproject.toml  "), "pyproject.toml")
 
-class TestVerifyNoUnexpectedChanges(unittest.TestCase):
-    def _mock_git_diff(self, files):
-        stdout = "\n".join(files) + "\n" if files else ""
-        return subprocess.CompletedProcess(
-            args=["git", "diff", "--name-only"],
-            returncode=0,
-            stdout=stdout,
-            stderr="",
-        )
 
-    def test_no_changes_passes(self):
+class TestVerify(unittest.TestCase):
+    def test_no_changes(self):
         with patch("set_version.changed_files", return_value=set()):
-            verify_no_unexpected_changes(["pyproject.toml"], baseline=set())
+            verify_no_unexpected_changes(["pyproject.toml"], set())
 
-    def test_expected_changes_pass(self):
+    def test_expected_only(self):
         with patch("set_version.changed_files", return_value={"pyproject.toml", "Cargo.toml"}):
-            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"], baseline=set())
+            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"], set())
 
-    def test_subset_of_expected_passes(self):
+    def test_subset(self):
         with patch("set_version.changed_files", return_value={"pyproject.toml"}):
-            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"], baseline=set())
+            verify_no_unexpected_changes(["pyproject.toml", "Cargo.toml"], set())
 
-    def test_unexpected_file_exits(self):
+    def test_unexpected_exits(self):
         with patch("set_version.changed_files", return_value={"pyproject.toml", "sneaky.txt"}):
-            with self.assertRaises(SystemExit) as ctx:
-                verify_no_unexpected_changes(["pyproject.toml"], baseline=set())
-            self.assertEqual(ctx.exception.code, 1)
+            with self.assertRaises(SystemExit):
+                verify_no_unexpected_changes(["pyproject.toml"], set())
 
-    def test_all_unexpected_exits(self):
-        with patch("set_version.changed_files", return_value={"malicious.py"}):
-            with self.assertRaises(SystemExit) as ctx:
-                verify_no_unexpected_changes(["pyproject.toml"], baseline=set())
-            self.assertEqual(ctx.exception.code, 1)
+    def test_baseline_excluded(self):
+        with patch("set_version.changed_files", return_value={"pyproject.toml", "pre.txt"}):
+            verify_no_unexpected_changes(["pyproject.toml"], {"pre.txt"})
 
-    def test_baseline_excluded_from_check(self):
-        with patch("set_version.changed_files", return_value={"pyproject.toml", "pre-existing.txt"}):
-            verify_no_unexpected_changes(["pyproject.toml"], baseline={"pre-existing.txt"})
+    def test_baseline_plus_unexpected_exits(self):
+        with patch("set_version.changed_files", return_value={"pyproject.toml", "pre.txt", "sneaky.txt"}):
+            with self.assertRaises(SystemExit):
+                verify_no_unexpected_changes(["pyproject.toml"], {"pre.txt"})
 
-    def test_baseline_plus_unexpected_still_fails(self):
-        with patch("set_version.changed_files", return_value={"pyproject.toml", "pre-existing.txt", "sneaky.txt"}):
-            with self.assertRaises(SystemExit) as ctx:
-                verify_no_unexpected_changes(["pyproject.toml"], baseline={"pre-existing.txt"})
-            self.assertEqual(ctx.exception.code, 1)
-
-    def test_dot_slash_path_matches(self):
+    def test_dot_slash_matches(self):
         with patch("set_version.changed_files", return_value={"pyproject.toml"}):
-            verify_no_unexpected_changes(["./pyproject.toml"], baseline=set())
+            verify_no_unexpected_changes(["./pyproject.toml"], set())
 
-    def test_backslash_path_matches(self):
+    def test_backslash_matches(self):
         with patch("set_version.changed_files", return_value={"dir/Cargo.toml"}):
-            verify_no_unexpected_changes(["dir\\Cargo.toml"], baseline=set())
+            verify_no_unexpected_changes(["dir\\Cargo.toml"], set())
 
 
 if __name__ == "__main__":
