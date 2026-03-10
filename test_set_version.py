@@ -109,13 +109,17 @@ class TestUpdateFile(unittest.TestCase):
             self.assertIn('[dependencies]\nserde = "1.0"', result)
             self.assertEqual(result.count("\n\n"), original.count("\n\n"))
 
-    def test_skip_missing_file(self):
-        self.assertFalse(update_file("/nonexistent/Cargo.toml", "1.0.0"))
+    def test_missing_file_exits(self):
+        with self.assertRaises(SystemExit) as ctx:
+            update_file("/nonexistent/Cargo.toml", "1.0.0")
+        self.assertEqual(ctx.exception.code, 1)
 
-    def test_skip_unsupported_file(self):
+    def test_unsupported_file_exits(self):
         with tempfile.TemporaryDirectory() as d:
             fp = self._write_toml(d, "setup.cfg", "[metadata]\nversion = 0.0.0\n")
-            self.assertFalse(update_file(fp, "1.0.0"))
+            with self.assertRaises(SystemExit) as ctx:
+                update_file(fp, "1.0.0")
+            self.assertEqual(ctx.exception.code, 1)
 
     def test_missing_section_exits(self):
         with tempfile.TemporaryDirectory() as d:
@@ -148,10 +152,13 @@ class TestUpdateFile(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             content = '[package]\nname = "test"\nversion = "1.0.0"\n'
             fp = self._write_toml(d, "Cargo.toml", content)
-            mtime_before = os.path.getmtime(fp)
-            update_file(fp, "1.0.0")
-            with open(fp) as f:
-                self.assertEqual(f.read(), content)
+            with patch("builtins.open", wraps=open) as mocked_open:
+                self.assertFalse(update_file(fp, "1.0.0"))
+            write_calls = [
+                c for c in mocked_open.call_args_list
+                if len(c.args) >= 2 and "w" in c.args[1]
+            ]
+            self.assertEqual(write_calls, [])
 
 
 class TestNormalizePath(unittest.TestCase):

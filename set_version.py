@@ -28,13 +28,13 @@ def detect_section(filepath):
 
 def update_file(filepath, version):
     if not os.path.exists(filepath):
-        print(f"Skipping {filepath} (not found)")
-        return False
+        print(f"::error::File not found: {filepath}", file=sys.stderr)
+        sys.exit(1)
 
     section = detect_section(filepath)
     if not section:
-        print(f"::warning::Unsupported file type: {filepath}")
-        return False
+        print(f"::error::Unsupported file type: {filepath}", file=sys.stderr)
+        sys.exit(1)
 
     with open(filepath, "r", encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
@@ -69,13 +69,20 @@ def normalize_path(p):
 
 
 def changed_files():
-    result = subprocess.run(
+    tracked = subprocess.run(
         ["git", "diff", "--name-only"],
         capture_output=True,
         text=True,
         check=True,
     )
-    return {normalize_path(f) for f in result.stdout.splitlines() if f.strip()}
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    paths = tracked.stdout.splitlines() + untracked.stdout.splitlines()
+    return {normalize_path(f) for f in paths if f.strip()}
 
 
 def verify_no_unexpected_changes(expected_files, baseline):
