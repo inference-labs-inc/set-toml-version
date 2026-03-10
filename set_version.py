@@ -18,7 +18,7 @@ SECTION_MAP = {
 
 
 def clean_version(raw):
-    cleaned = re.sub(r"^[v=]+", "", raw.strip())
+    cleaned = re.sub(r"^[\sv=]+", "", raw).rstrip()
     match = re.fullmatch(SEMVER_RE, cleaned)
     if not match:
         return None
